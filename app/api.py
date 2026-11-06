@@ -5,6 +5,22 @@ from datetime import datetime, timezone
 from typing import Annotated, List
 import os
 import sys
+import logging
+
+# configuração do log
+LOGGER = logging.getLogger("aplicacao")
+LOGGER.setLevel(logging.DEBUG)
+
+saida_padrao = logging.StreamHandler()
+arquivo = logging.FileHandler("aplicacao.log", encoding='utf-8')
+
+formatador = logging.Formatter("%(name)s | %(levelname)s | %(asctime)s | %(filename)s:%(lineno)s | %(message)s")
+
+saida_padrao.setFormatter(formatador)
+arquivo.setFormatter(formatador)
+
+LOGGER.addHandler(saida_padrao)
+LOGGER.addHandler(arquivo)
 
 from fastapi import Depends, FastAPI, Response, status
 from requests import RequestException, request
@@ -91,29 +107,36 @@ def notificar(mensagem: str):
 @APP.get("/")
 async def index():
     """Rota inicial da API."""
+    LOGGER.info("Acesso à rota GET /")
     return {"mensagem": "Olá, mundo!"}
 
 
 @APP.get("/autor")
 async def autor():
     """Nome do autor do projeto"""
+    LOGGER.info("Acesso à rota GET /autor")
     return {"message": "Leandro Willian Fraccaroli"}
 
 
 @APP.get("/tarefas")
 async def tarefas(sessao: SESSAO) -> List[Tarefa]:
     """Lista todas as tarefas."""
+    LOGGER.info("Acesso à rota GET /tarefas")
     return sessao.exec(select(Tarefa)).all()
 
 
 @APP.post("/tarefas")
 async def post_tarefas(sessao: SESSAO, titulo: str, descricao: str):
     """Cria uma nova tarefa."""
+    LOGGER.info("Acesso à rota POST /tarefas")
     tarefa_nova = criar_tarefa(titulo, descricao)
 
     sessao.add(tarefa_nova)
     sessao.commit()
     sessao.refresh(tarefa_nova)
+
+    LOGGER.info(f"Tarefa {tarefa_nova.id} criada")
+    LOGGER.debug(f"Dados da tarefa criada: {tarefa_nova}")
 
     notificar(f"Tarefa {tarefa_nova.id} criada com sucesso")
     return {"message": "ok"}
@@ -122,6 +145,7 @@ async def post_tarefas(sessao: SESSAO, titulo: str, descricao: str):
 @APP.get("/tarefas/{tarefa_id}")
 async def tarefa_especifica(sessao: SESSAO, tarefa_id: int):
     """Retorna uma tarefa específica."""
+    LOGGER.info(f"Acesso à rota GET /tarefas/{tarefa_id}")
     tarefa = encontrar_tarefa(sessao, tarefa_id)
 
     if not tarefa:
@@ -133,6 +157,7 @@ async def tarefa_especifica(sessao: SESSAO, tarefa_id: int):
 @APP.put("/tarefas/{tarefa_id}")
 async def concluir_tarefa(sessao: SESSAO, tarefa_id: int):
     """Marca uma tarefa como concluída."""
+    LOGGER.info(f"Acesso à rota PUT /tarefas/{tarefa_id}")
     tarefa = encontrar_tarefa(sessao, tarefa_id)
 
     if not tarefa:
@@ -152,6 +177,7 @@ async def concluir_tarefa(sessao: SESSAO, tarefa_id: int):
 @APP.delete("/tarefas/{tarefa_id}")
 async def apagar_tarefa(sessao: SESSAO, tarefa_id: int):
     """Apaga uma tarefa."""
+    LOGGER.info(f"Acesso à rota DELETE /tarefas/{tarefa_id}")
     tarefa = encontrar_tarefa(sessao, tarefa_id)
 
     if not tarefa:
@@ -163,3 +189,12 @@ async def apagar_tarefa(sessao: SESSAO, tarefa_id: int):
 
     notificar(f"Tarefa {tarefa_id_apagada} apagada com sucesso")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# rota default para quando nenhuma das outras de match
+@APP.api_route("/{caminho:path}", methods=["GET", "POST", "PUT", "DELETE"])
+async def rota_inexistente(caminho: str, resposta: Response):
+    """Captura acessos a rotas que não existem."""
+    LOGGER.error(f"Rota inexistente acessada: /{caminho}")
+    resposta.status_code = status.HTTP_404_NOT_FOUND
+    return {"message": "Rota não existente"}
