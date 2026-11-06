@@ -5,27 +5,12 @@ from datetime import datetime, timezone
 from typing import Annotated, List
 import os
 import sys
-import logging
-
-# configuração do log
-LOGGER = logging.getLogger("aplicacao")
-LOGGER.setLevel(logging.DEBUG)
-
-saida_padrao = logging.StreamHandler()
-arquivo = logging.FileHandler("aplicacao.log", encoding='utf-8')
-
-formatador = logging.Formatter("%(name)s | %(levelname)s | %(asctime)s | %(filename)s:%(lineno)s | %(message)s")
-
-saida_padrao.setFormatter(formatador)
-arquivo.setFormatter(formatador)
-
-LOGGER.addHandler(saida_padrao)
-LOGGER.addHandler(arquivo)
 
 from fastapi import Depends, FastAPI, Response, status
 from requests import RequestException, request
 from sqlmodel import Session, SQLModel, create_engine, select
 
+from app.log import LOGGER
 from app.modelo import Tarefa
 
 
@@ -135,8 +120,8 @@ async def post_tarefas(sessao: SESSAO, titulo: str, descricao: str):
     sessao.commit()
     sessao.refresh(tarefa_nova)
 
-    LOGGER.info(f"Tarefa {tarefa_nova.id} criada")
-    LOGGER.debug(f"Dados da tarefa criada: {tarefa_nova}")
+    LOGGER.info("Tarefa %s criada", tarefa_nova.id)
+    LOGGER.debug("Dados da tarefa criada: %s", tarefa_nova)
 
     notificar(f"Tarefa {tarefa_nova.id} criada com sucesso")
     return {"message": "ok"}
@@ -145,7 +130,7 @@ async def post_tarefas(sessao: SESSAO, titulo: str, descricao: str):
 @APP.get("/tarefas/{tarefa_id}")
 async def tarefa_especifica(sessao: SESSAO, tarefa_id: int):
     """Retorna uma tarefa específica."""
-    LOGGER.info(f"Acesso à rota GET /tarefas/{tarefa_id}")
+    LOGGER.info("Acesso à rota GET /tarefas/%s", tarefa_id)
     tarefa = encontrar_tarefa(sessao, tarefa_id)
 
     if not tarefa:
@@ -157,7 +142,7 @@ async def tarefa_especifica(sessao: SESSAO, tarefa_id: int):
 @APP.put("/tarefas/{tarefa_id}")
 async def concluir_tarefa(sessao: SESSAO, tarefa_id: int):
     """Marca uma tarefa como concluída."""
-    LOGGER.info(f"Acesso à rota PUT /tarefas/{tarefa_id}")
+    LOGGER.info("Acesso à rota PUT /tarefas/%s", tarefa_id)
     tarefa = encontrar_tarefa(sessao, tarefa_id)
 
     if not tarefa:
@@ -177,7 +162,7 @@ async def concluir_tarefa(sessao: SESSAO, tarefa_id: int):
 @APP.delete("/tarefas/{tarefa_id}")
 async def apagar_tarefa(sessao: SESSAO, tarefa_id: int):
     """Apaga uma tarefa."""
-    LOGGER.info(f"Acesso à rota DELETE /tarefas/{tarefa_id}")
+    LOGGER.info("Acesso à rota DELETE /tarefas/%s", tarefa_id)
     tarefa = encontrar_tarefa(sessao, tarefa_id)
 
     if not tarefa:
@@ -191,10 +176,11 @@ async def apagar_tarefa(sessao: SESSAO, tarefa_id: int):
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-# rota default para quando nenhuma das outras de match
+# Esta rota precisa ficar por último: ela pega qualquer caminho
+# que não combinou com nenhuma das rotas acima.
 @APP.api_route("/{caminho:path}", methods=["GET", "POST", "PUT", "DELETE"])
 async def rota_inexistente(caminho: str, resposta: Response):
     """Captura acessos a rotas que não existem."""
-    LOGGER.error(f"Rota inexistente acessada: /{caminho}")
+    LOGGER.error("Rota inexistente acessada: /%s", caminho)
     resposta.status_code = status.HTTP_404_NOT_FOUND
     return {"message": "Rota não existente"}
